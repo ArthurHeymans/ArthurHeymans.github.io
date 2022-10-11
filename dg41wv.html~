@@ -1,0 +1,291 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+<head>
+<!-- Oct 11, 2022 -->
+<meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Porting the Intel DG41WV and Intel 4 series DDR3 raminit to coreboot</title>
+<meta name="author" content="Arthur Heymans" />
+<meta name="generator" content="Org Mode" />
+<link rel='icon' type='image/x-icon' href='/images/favicon.ico'/>
+<meta name='viewport' content='width=device-width, initial-scale=1'>
+<link rel='stylesheet' href='https://code.cdn.mozilla.net/fonts/fira.css'>
+<link rel='stylesheet' href='/css/site.css?v=2' type='text/css'/>
+<link rel='stylesheet' href='/css/custom.css' type='text/css'/>
+<link rel='stylesheet' href='/css/syntax-coloring.css' type='text/css'/>
+<script>
+// @license magnet:?xt=urn:btih:1f739d935676111cfff4b4693e3816e664797050&amp;dn=gpl-3.0.txt GPL-v3-or-Later
+     function CodeHighlightOn(elem, id)
+     {
+       var target = document.getElementById(id);
+       if(null != target) {
+         elem.classList.add("code-highlighted");
+         target.classList.add("code-highlighted");
+       }
+     }
+     function CodeHighlightOff(elem, id)
+     {
+       var target = document.getElementById(id);
+       if(null != target) {
+         elem.classList.remove("code-highlighted");
+         target.classList.remove("code-highlighted");
+       }
+     }
+// @license-end
+</script>
+</head>
+<body>
+<div id="org-div-home-and-up">
+ <a accesskey="h" href="/"> UP </a>
+ |
+ <a accesskey="H" href="/"> HOME </a>
+</div><header id="top" class="status">
+<div class='intro'>
+  <img src='/images/about/profile.png' alt='Arthur Heymans' class='no-border'/>
+  <h1>
+    <span class="gray">Arthur</span>
+    <span class="black">Heymans</span>
+  </h1>
+  <p>hacker</p>
+</div>
+
+<div class='nav'>
+<ul>
+<li><a href='/'>Blog</a>.</li>
+<li><a href='/index.xml'>RSS</a>.</li>
+<li><a href='/about/'>About</a></li>
+</ul>
+</div>
+</header>
+<main id="content" class="content">
+<h1 class="title">Porting the Intel DG41WV and Intel 4 series DDR3 raminit to coreboot
+<br />
+<span class="subtitle">Published on Nov 03, 2018 by Arthur Heymans.</span>
+</h1>
+<p>
+This post will explain a bit how the Intel 4 series DDR3 raminit came to be and will introduce a new board that can make use of this code, namely the Intel DG41WV.
+</p>
+
+<section id="outline-container-org122cd64" class="outline-2">
+<h2 id="org122cd64">DDR3 raminit</h2>
+<div class="outline-text-2" id="text-org122cd64">
+<p>
+In the past I have worked quite on a bit on the coreboot code that support the Intel 4 series desktop chipset (those chipsets go by the name of G41, G43, G45, Q43, Q45, P41, P43, P45, B43 with each having a somewhat different feature set). In the past I have made quite a few improvements to the coreboot code for this platform:
+</p>
+
+<ul class="org-ul">
+<li>Improve the dram compatibility</li>
+<li>Rework how the SPD’s get decoded</li>
+<li>Rework the DQS receive enable calibration</li>
+<li>Add support for using external graphic devices in the PEG slottart of the dram initialization and it will be the firmware&rsquo;s job to find out good values for those.</li>
+<li>Add resume from S3 support</li>
+<li>Make properly rebooting possible</li>
+<li>Getting variants with the ICH10 southbridge to work</li>
+</ul>
+
+<p>
+Given the work I did on this and other northbridges/raminit code I was ready for something more challenging and I thought adding DDR3 support would be something nice (previously. DDR3 is quite a different beast however.
+</p>
+</div>
+</section>
+
+<section id="outline-container-orge61cf98" class="outline-2">
+<h2 id="orge61cf98">DDR3 fly-by topology</h2>
+<div class="outline-text-2" id="text-orge61cf98">
+<p>
+To increase the clock frequency beyond DDR2 frequencies something had to be done to the topology of dram DIMMs. To increase the signal integrity a fly by topology had to be adopted.
+</p>
+
+<p>
+The data signals follow a shorter path and come from below, but where the clock signal previously followed a T-branch path and arrived more or less at the same time in the chips, DDR3 technology adopted a fly-by topology. The clock signal arrives at a different time for each data signal pair, DQ (data) and DQS (data strobe).
+Memory controllers naturally can delay some of its signals using DLL&rsquo;s (delay locked loop). The clock signal will generally be fixed at the start of the dram initialization and it will be the firmware&rsquo;s job to find out good values for the delays on the other signal lines. The delays are therefore always delays with respect to this master&rsquo;s clock signal.
+</p>
+</div>
+</section>
+<section id="outline-container-orgfdf47d9" class="outline-2">
+<h2 id="orgfdf47d9">Write leveling</h2>
+<div class="outline-text-2" id="text-orgfdf47d9">
+<p>
+A first training that is done on DDR3 dimms is called write leveling. This is a special mode of operation on DDR3 dimm&rsquo;s which allow you to sample back the DQS on the DQ signal in order to find a rising edge with respect to the clock:
+</p>
+</div>
+</section>
+
+<section id="outline-container-orgd832445" class="outline-2">
+<h2 id="orgd832445">Read and Write training</h2>
+<div class="outline-text-2" id="text-orgd832445">
+<p>
+After that you need to adjust the delays such that the skew between DQ and DQS is fine for both read and write operations. The algorithms for these are rather straightforward.
+</p>
+
+<p>
+First you start with write training. You sample all delays starting from the DQS delays obtained in the write leveling (the DQ delays are always with respect to the strobe DQS) and save where write start working and start failing. After that you pick the centered value.
+</p>
+
+<pre class="example" id="orge927f97">
+DQS delay value (start)
+      ^                             middle value
+      |  write to dram              ideal DQ delay     write to dram
+      |  don't read back                  ^            don't read back
+      |         |                         |                  |
+      +----------------------|++++++++++++++++++++++++|-----------
+                                   write to dram
+                                   read back
+</pre>
+
+<p>
+Something analogous is done for DQS read delay but instead of trying to write back something you loop over all possible read DQS delays (starting from 0) and try to read back something.
+S3 support and faster boot times
+</p>
+
+<p>
+All these trainings are destroy the the dram&rsquo;s content. This is fine if you boot for the first time but when you are trying to resume from S3 (suspend to ram) this is not an option. To keep the ram content in place you need to save the result from those trainings and restore those values when resuming from S3. Previously the RTC nvram (cmos battery backed) was used to store a few things but its size is severely limited (128 bytes) so another non volatile medium was needed. The other easily accessible non volatile medium is the flash chip itself which is usually at least 1MiB large. So what we do is to reserve a small space (64KiB) on that flash where we can store the results of our dram training.
+Typically users don&rsquo;t change DIMM&rsquo;s on their system that often. Fetching information from these DIMM&rsquo;s that the dram controller needs is quite slow (reading a full SPD chips takes at least 50ms for each DIMM depending the protocol used). The SPI flash cache we previously used to save the training results can come in handy here to cache that information too (we only need to check if DIMM&rsquo;s have changed which can be done by just reading the ID bytes on the SPD chip). The end result is that with this cache the boot times are noticeably reduced. On the first boot it takes at least 500ms to initialize the dram but on subsequent boots it only takes ~20ms since everything is cached on a fast medium (SPI flash).
+</p>
+</div>
+</section>
+<section id="outline-container-org333e718" class="outline-2">
+<h2 id="org333e718">Intel DG41WV</h2>
+<div class="outline-text-2" id="text-org333e718">
+<p>
+The board I chose to develop the DDR3 raminit on was an Intel DG41WV. I chose it for a few reasons:
+</p>
+
+<ul class="org-ul">
+<li>It was cheap</li>
+<li>It had a socket (DIP8) spi flash which makes reflashing easy and avoid unexpected electrical difficulties which might require desoldering it.</li>
+<li>It has a SuperIO supported by coreboot</li>
+<li>It has a serial port</li>
+</ul>
+
+<p>
+Obviously getting the ram to work was by far the largest part of this port. The board port part is usually really small and with some experience it can usually be done in a few hours. The DG41WV was no different in that aspect. One peculiarity was that the on the VGA output the display was garbled. I had this problem on other boards before and is typically an issue with the default clockgen configuration having a wrong clock frequency for the VGA output. Publicly available documentation for CK505 clockgens is scarce so one solution is to program whatever vendor has set.
+First figure out on which number Linux maps the SMBUS:
+</p>
+
+<div class="SRS" id="org05bc60e">
+<p>
+modprobe i2c-dev
+i2cdetect -l
+</p>
+
+</div>
+
+<p>
+The result will look like:
+</p>
+
+<pre class="example" id="orgfe6a0ab">
+i2c-3   i2c             i915 gmbus dpc                          I2C adapter
+i2c-1   i2c             i915 gmbus vga                          I2C adapter
+i2c-8   i2c             DPDDC-D                                 I2C adapter
+i2c-6   i2c             DPDDC-B                                 I2C adapter
+i2c-4   i2c             i915 gmbus dpb                          I2C adapter
+i2c-2   i2c             i915 gmbus panel                        I2C adapter
+i2c-0   i2c             i915 gmbus ssc                          I2C adapter
+i2c-9   smbus           SMBus I801 adapter at 0400              SMBus adapter (this is the one)
+i2c-7   i2c             DPDDC-C                                 I2C adapter
+i2c-5   i2c             i915 gmbus dpd                          I2C adapter
+</pre>
+
+<p>
+Now we can read back to ck505 configuration while running vendor firmware using smbus block read operation:
+</p>
+
+<div class="SRS" id="org0348d56">
+<p>
+i2cdump -y 9 0x69 s
+#+END<sub>SRC</sub>
+</p>
+
+<p>
+Now you put this information in the devicetree in coreboot
+</p>
+
+<p>
+#+BEGIN<sub>EXAMPLE</sub>
+            device pci 1f.3 on      # SMbus
+                subsystemid 0x8086 0x5756
+                    chip drivers/i2c/ck505
+                    register &ldquo;mask&rdquo; = &ldquo;{ 0xff, 0xff, 0xff,
+                         0xff, 0xff, 0xff, 0xff, 0xff,
+                         0xff, 0xff, 0xff, 0xff, 0xff,
+                         0xff, 0xff, 0xff, 0xff, 0xff,
+                         0xff, 0xff, 0xff }&rdquo;
+                    register &ldquo;regs&rdquo; = &ldquo;{ 0x41, 0x99, 0xff,
+                         0xff, 0xff, 0x00, 0x00, 0x06,
+                         0x03, 0x65, 0x83, 0x80, 0x15,
+                         0xc0, 0x09, 0x00, 0x00, 0x00,
+                         0x06, 0x00, 0xea }&rdquo;
+                    device i2c 69 on end
+                end
+            end
+#+EMD<sub>EXAMPLE</sub>
+</p>
+
+<p>
+What works on this board?
+</p>
+
+<ul class="org-ul">
+<li>2 x 4GB DDR3 DIMMs (using dual rank DIMMs)</li>
+<li>Core 2 CPU&rsquo;s (duo and quad) LGA775 CPU&rsquo;s (including modded LGA771 CPU&rsquo;s)</li>
+<li>PCI, PCIe, USB, PS2, Serial</li>
+<li>Native graphic init with VGA output</li>
+<li>S3 resume</li>
+</ul>
+
+<p>
+TD;DL how do I use coreboot on the Intel DG41WV
+</p>
+
+<p>
+Build a basic but working image with SeaBIOS for this board is really easy.
+Run the following in the coreboot directory:
+</p>
+
+<p>
+#+BEGIN<sub>SRS</sub> bash
+echo CONFIG<sub>VENDOR</sub><sub>INTEL</sub>=y &gt; .config
+echo CONFIG<sub>BOARD</sub><sub>INTEL</sub><sub>DG41WV</sub>=y &gt;&gt; .config
+make olddefconfig
+make
+</p>
+
+</div>
+
+<p>
+Now you can flash this to the flash chip. This can be done internally since the vendor firmware does not lock the SPI flash.
+</p>
+
+<div class="SRS" id="org2bee030">
+<p>
+flashrom -p internal -w build/coreboot.rom
+</p>
+
+</div>
+
+<p>
+Feel free to ask any questions!
+</p>
+</div>
+</section>
+<section id="outline-container-orgec8bea8" class="outline-2">
+<h2 id="orgec8bea8">UPDATE</h2>
+<div class="outline-text-2" id="text-orgec8bea8">
+<p>
+This board broke on me. Luckily I have equivalent board from other vendors.
+</p>
+</div>
+</section>
+</main>
+<footer id="postamble" class="status">
+<div class='footer'>
+  Copyright © 2022 Arthur Heymans<br>
+  Last updated on Oct 11, 2022. Generated using <a href="https://www.gnu.org/software/emacs/">Emacs</a> 29.0.50 (<a href="https://orgmode.org">Org</a> mode 9.4.6).
+</div>
+</footer>
+</body>
+</html>

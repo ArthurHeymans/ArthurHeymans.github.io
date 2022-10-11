@@ -1,0 +1,172 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+<head>
+<!-- Oct 11, 2022 -->
+<meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Hacking ath9k wifi device adventures</title>
+<meta name="author" content="Arthur Heymans" />
+<meta name="generator" content="Org Mode" />
+<link rel='icon' type='image/x-icon' href='/images/favicon.ico'/>
+<meta name='viewport' content='width=device-width, initial-scale=1'>
+<link rel='stylesheet' href='https://code.cdn.mozilla.net/fonts/fira.css'>
+<link rel='stylesheet' href='/css/site.css?v=2' type='text/css'/>
+<link rel='stylesheet' href='/css/custom.css' type='text/css'/>
+<link rel='stylesheet' href='/css/syntax-coloring.css' type='text/css'/>
+<script>
+// @license magnet:?xt=urn:btih:1f739d935676111cfff4b4693e3816e664797050&amp;dn=gpl-3.0.txt GPL-v3-or-Later
+     function CodeHighlightOn(elem, id)
+     {
+       var target = document.getElementById(id);
+       if(null != target) {
+         elem.classList.add("code-highlighted");
+         target.classList.add("code-highlighted");
+       }
+     }
+     function CodeHighlightOff(elem, id)
+     {
+       var target = document.getElementById(id);
+       if(null != target) {
+         elem.classList.remove("code-highlighted");
+         target.classList.remove("code-highlighted");
+       }
+     }
+// @license-end
+</script>
+</head>
+<body>
+<div id="org-div-home-and-up">
+ <a accesskey="h" href="/"> UP </a>
+ |
+ <a accesskey="H" href="/"> HOME </a>
+</div><header id="top" class="status">
+<div class='intro'>
+  <img src='/images/about/profile.png' alt='Arthur Heymans' class='no-border'/>
+  <h1>
+    <span class="gray">Arthur</span>
+    <span class="black">Heymans</span>
+  </h1>
+  <p>hacker</p>
+</div>
+
+<div class='nav'>
+<ul>
+<li><a href='/'>Blog</a>.</li>
+<li><a href='/index.xml'>RSS</a>.</li>
+<li><a href='/about/'>About</a></li>
+</ul>
+</div>
+</header>
+<main id="content" class="content">
+<h1 class="title">Hacking ath9k wifi device adventures
+<br />
+<span class="subtitle">Published on Nov 03, 2018 by Arthur Heymans.</span>
+</h1>
+<p>
+So here is where it all started. I have this apple branded atheros AR5BXB92,
+with an ar9280 chipset, which is supported by the ath9k Linux drivers.
+This chipset is supposed to support both 5GHz and 2.4GHz frequencies,
+but using the wavemon tool 5GHz SSID never show up even when I&rsquo;m next
+to a device that emits one.
+</p>
+
+<p>
+<code>iw list</code> shows the following:
+</p>
+
+<pre class="example" id="org2bbfdcf">
+Band 2:
+    Capabilities: 0x11ce
+        HT20/HT40
+        SM Power Save disabled
+        RX HT40 SGI
+        TX STBC
+        RX STBC 1-stream
+        Max AMSDU length: 3839 bytes
+        DSSS/CCK HT40
+    Maximum RX AMPDU length 65535 bytes (exponent: 0x003)
+    Minimum RX AMPDU time spacing: 8 usec (0x06)
+    HT TX/RX MCS rate indexes supported: 0-15
+    Bitrates (non-HT):
+        * 6.0 Mbps
+        * 9.0 Mbps
+        * 12.0 Mbps
+        * 18.0 Mbps
+        * 24.0 Mbps
+        * 36.0 Mbps
+        * 48.0 Mbps
+        * 54.0 Mbps
+    Frequencies:
+        * 5180 MHz [36] (16.0 dBm) (no IR)
+        * 5200 MHz [40] (16.0 dBm) (no IR)
+        * 5220 MHz [44] (16.0 dBm) (no IR)
+        * 5240 MHz [48] (16.0 dBm) (no IR)
+        * 5260 MHz [52] (17.0 dBm) (no IR, radar detection)
+        * 5280 MHz [56] (16.0 dBm) (no IR, radar detection)
+        * 5300 MHz [60] (16.0 dBm) (no IR, radar detection)
+        * 5320 MHz [64] (16.0 dBm) (no IR, radar detection)
+        * 5500 MHz [100] (disabled)
+        * 5520 MHz [104] (disabled)
+        * 5540 MHz [108] (disabled)
+        * 5560 MHz [112] (disabled)
+        * 5580 MHz [116] (disabled)
+        * 5600 MHz [120] (disabled)
+        * 5620 MHz [124] (disabled)
+        * 5640 MHz [128] (disabled)
+        * 5660 MHz [132] (disabled)
+        * 5680 MHz [136] (disabled)
+        * 5700 MHz [140] (disabled)
+        * 5745 MHz [149] (disabled)
+        * 5765 MHz [153] (disabled)
+        * 5785 MHz [157] (disabled)
+        * 5805 MHz [161] (disabled)
+        * 5825 MHz [165] (disabled)
+</pre>
+
+<p>
+So most of the 5GHz channels which are avaible in my country were disabled.
+Changing the reg domain <code>iw reg set BE</code> did not change this
+On the web I found some articles about modifying the reg domain in the eeprom
+that is present on that wifi card. One of these is the following guide.
+The link to the iwleeprom code is dead but can be found on the following github repo.
+Doing so I found out that my region code is 0x65. I tried to modify that eeprom content
+but that didn&rsquo;t seem to work properly for some reason.
+I knew that almost everything is done by the kernel driver so I looked for the possibilty
+to override this regional setting an I found it! By changing the reg<sub>rules</sub> for my 0x65 domain
+device and recompiling the ath9k module I got those 5GHz appearing in wavemon and listed as
+supported in iw list!
+</p>
+
+<div class="org-src-container">
+<pre class="src src-diff"><span class="org-diff-header">diff --git a/drivers/net/wireless/ath/regd.c b/drivers/net/wireless/ath/regd.c</span>
+<span class="org-diff-header">index e25bfdf78c2e..e4cbf366b4e3 100644</span>
+<span class="org-diff-header">--- </span><span class="org-diff-header"><span class="org-diff-file-header">a/drivers/net/wireless/ath/regd.c</span></span>
+<span class="org-diff-header">+++ </span><span class="org-diff-header"><span class="org-diff-file-header">b/drivers/net/wireless/ath/regd.c</span></span>
+<span class="org-diff-hunk-header">@@ -74,12 +74,12 @@</span><span class="org-diff-function"> static const struct ieee80211_regdomain ath_world_regdom_60_61_62 = {</span>
+<span class="org-diff-context"> /* Can be used by 0x63 and 0x65 */</span>
+<span class="org-diff-context">  static const struct ieee80211_regdomain ath_world_regdom_63_65 = {</span>
+<span class="org-diff-context">  -   .n_reg_rules = 4,</span>
+<span class="org-diff-context">  +   .n_reg_rules = 5,</span>
+<span class="org-diff-context">      .alpha2 =  "99",</span>
+<span class="org-diff-context">          .reg_rules = {</span>
+<span class="org-diff-context">          -       ATH9K_2GHZ_CH01_11,</span>
+<span class="org-diff-context">          -       ATH9K_2GHZ_CH12_13,</span>
+<span class="org-diff-context">          -       ATH9K_5GHZ_NO_MIDBAND,</span>
+<span class="org-diff-context">          +       ATH9K_2GHZ_ALL,</span>
+<span class="org-diff-context">          +       ATH9K_5GHZ_ALL,</span>
+<span class="org-diff-context">          +</span>
+<span class="org-diff-context">          }</span>
+   };
+</pre>
+</div>
+</main>
+<footer id="postamble" class="status">
+<div class='footer'>
+  Copyright © 2022 Arthur Heymans<br>
+  Last updated on Oct 11, 2022. Generated using <a href="https://www.gnu.org/software/emacs/">Emacs</a> 29.0.50 (<a href="https://orgmode.org">Org</a> mode 9.4.6).
+</div>
+</footer>
+</body>
+</html>
