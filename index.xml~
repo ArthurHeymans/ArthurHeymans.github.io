@@ -14,8 +14,8 @@
   <link>http://example.com/</link>
   <description><![CDATA[]]></description>
   <language>en</language>
-  <pubDate>Tue, 11 Oct 2022 14:38:17 +0200</pubDate>
-  <lastBuildDate>Tue, 11 Oct 2022 14:38:17 +0200</lastBuildDate>
+  <pubDate>Tue, 11 Oct 2022 19:39:59 +0200</pubDate>
+  <lastBuildDate>Tue, 11 Oct 2022 19:39:59 +0200</lastBuildDate>
   <generator>Emacs 29.0 Org-mode 9.4.6</generator>
   <webMaster>arthur@t41sarthur (Arthur Heymans)</webMaster>
   <image>
@@ -25,6 +25,14 @@
   </image>
 
   <ul class="org-ul">
+    <li><p>
+      <b><a href="braswell_fsp.html">FSP1.1 Braswell TempRaminit problems</a></b>
+    </p>
+    <p class='pubdate'>by Arthur Heymans on Nov 23, 2019.</p></li>
+    <li><p>
+      <b><a href="car.html">A gentle introduction to Cache-as-Ram on X86</a></b>
+    </p>
+    <p class='pubdate'>by Arthur Heymans on Oct 23, 2019.</p></li>
     <li><p>
       <b><a href="x60flash.html">How to flash coreboot to the thinkpad x60 the proper way</a></b>
     </p>

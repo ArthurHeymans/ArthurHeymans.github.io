@@ -62,6 +62,14 @@
 <h1 class="title">Blog Index</h1>
 </header><ul class="org-ul">
 <li><p>
+<b><a href="braswell_fsp.html">FSP1.1 Braswell TempRaminit problems</a></b>
+</p>
+<p class='pubdate'>by Arthur Heymans on Nov 23, 2019.</p></li>
+<li><p>
+<b><a href="car.html">A gentle introduction to Cache-as-Ram on X86</a></b>
+</p>
+<p class='pubdate'>by Arthur Heymans on Oct 23, 2019.</p></li>
+<li><p>
 <b><a href="x60flash.html">How to flash coreboot to the thinkpad x60 the proper way</a></b>
 </p>
 <p class='pubdate'>by Arthur Heymans on Dec 01, 2018.</p></li>

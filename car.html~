@@ -1,0 +1,200 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+<head>
+<!-- Oct 11, 2022 -->
+<meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>A gentle introduction to Cache-as-Ram on X86</title>
+<meta name="author" content="Arthur Heymans" />
+<meta name="generator" content="Org Mode" />
+<link rel='icon' type='image/x-icon' href='/images/favicon.ico'/>
+<meta name='viewport' content='width=device-width, initial-scale=1'>
+<link rel='stylesheet' href='https://code.cdn.mozilla.net/fonts/fira.css'>
+<link rel='stylesheet' href='/css/site.css?v=2' type='text/css'/>
+<link rel='stylesheet' href='/css/custom.css' type='text/css'/>
+<link rel='stylesheet' href='/css/syntax-coloring.css' type='text/css'/>
+<script>
+// @license magnet:?xt=urn:btih:1f739d935676111cfff4b4693e3816e664797050&amp;dn=gpl-3.0.txt GPL-v3-or-Later
+     function CodeHighlightOn(elem, id)
+     {
+       var target = document.getElementById(id);
+       if(null != target) {
+         elem.classList.add("code-highlighted");
+         target.classList.add("code-highlighted");
+       }
+     }
+     function CodeHighlightOff(elem, id)
+     {
+       var target = document.getElementById(id);
+       if(null != target) {
+         elem.classList.remove("code-highlighted");
+         target.classList.remove("code-highlighted");
+       }
+     }
+// @license-end
+</script>
+</head>
+<body>
+<div id="org-div-home-and-up">
+ <a accesskey="h" href="/"> UP </a>
+ |
+ <a accesskey="H" href="/"> HOME </a>
+</div><header id="top" class="status">
+<div class='intro'>
+  <img src='/images/about/profile.png' alt='Arthur Heymans' class='no-border'/>
+  <h1>
+    <span class="gray">Arthur</span>
+    <span class="black">Heymans</span>
+  </h1>
+  <p>hacker</p>
+</div>
+
+<div class='nav'>
+<ul>
+<li><a href='/'>Blog</a>.</li>
+<li><a href='/index.xml'>RSS</a>.</li>
+<li><a href='/about/'>About</a></li>
+</ul>
+</div>
+</header>
+<main id="content" class="content">
+<h1 class="title">A gentle introduction to Cache-as-Ram on X86
+<br />
+<span class="subtitle">Published on Oct 23, 2019 by Arthur Heymans.</span>
+</h1>
+
+<div id="org686eff2" class="figure">
+<p><img src="../images/posts/Cachehierarchy-example.png" alt="Cachehierarchy-example.png" class="center no-border" />
+</p>
+</div>
+
+<p>
+This explains a bit of history on CAR in coreboot and how it works.
+</p>
+
+<section id="outline-container-org79b6f33" class="outline-2">
+<h2 id="org79b6f33">Glossary</h2>
+<div class="outline-text-2" id="text-org79b6f33">
+<ul class="org-ul">
+<li><b>CPU cache</b>: CPU cache is a piece of fast memory used by the CPU to cache access to things accessed in the CPU&rsquo;s linear memory space. This includes for DRAM, PCI BARs, the boot flash.</li>
+<li><b>Cache-as-RAM/CAR</b>: Using not memory mapped CPU cache as execution environment.</li>
+<li><b>XIP</b>: Execute in place on a memory mapped (read only) medium.</li>
+<li><b>SRAM</b>: Static Random Access Memory, here: memory mapped memory that needs no initialization.</li>
+<li><b>ROMCC</b>: A C compiler using only the CPU registers.</li>
+</ul>
+</div>
+</section>
+
+<section id="outline-container-org3808e4d" class="outline-2">
+<h2 id="org3808e4d">Cache-as-Ram, the basics</h2>
+<div class="outline-text-2" id="text-org3808e4d">
+<p>
+When an X86 platforms boot, it starts in a pretty bare environment. The first instruction is fetched from the top of the boot medium, which on most x86 platforms is memory mapped below 4G (in 32bit protected mode). Not only do they start in 16bit &rsquo;real&rsquo; mode, most of the hardware starts uninitialized. This includes the dram controller. Another thing about X86 platforms is that they generally don&rsquo;t feature SRAM, static RAM. SRAM for this purpose of this text is a small region of ram that is available without any initialization. Without RAM this leaves the system with just CPU registers and a memory mapped boot medium of which code can be executed in place (XIP) to initialize the hardware.
+</p>
+
+<p>
+For simple dram controllers that environment is just fine and initializing the dram controller in assembly code without using a stack is very doable. Modern systems however require complex initialization procedures and writing that in assembly would be either too hard or simply impossible. To overcome this limitation a technique called Cache-as-Ram exists. It allows to use the CPU&rsquo;s Cache-as-Ram. This in turn makes it possible to write the early initialization code in a higher level programming language compiled by a regular compiler, e.g. GCC. Typically only the stack is placed in Cache-as-Ram and the code is still executed in place on the boot medium, but copying code in the cache as ram and executing from there is also possible.
+</p>
+
+<p>
+For coreboot this means that with only a very small amount of assembly code to set up CAR, all the other code can written in regular ANSI C, which compared to writing assembly tremendously increases development speed and is much less error prone.
+</p>
+</div>
+</section>
+<section id="outline-container-orgd1b5dff" class="outline-2">
+<h2 id="orgd1b5dff">A bit of history on Cache-as-Ram in coreboot</h2>
+<div class="outline-text-2" id="text-orgd1b5dff">
+<p>
+I was not around so this part could be inaccurate. It should however paint an picture of the challenges of early code on x86 platforms.
+</p>
+</div>
+<div id="outline-container-org119de5e" class="outline-3">
+<h3 id="org119de5e">Linux as a BIOS? The invention of romstage</h3>
+<div class="outline-text-3" id="text-org119de5e">
+<p>
+When LinuxBIOS, later coreboot, started out, the first naive attempt to run the Linux kernel instead of the legacy BIOS interface, was to jump straight to loading the kernel. This did not work at all, since dram was not working at that point. LinuxBIOS v1 therefore initialized the memory in assembly before it was able to load the kernel. This executed in place and would later become romstage. It turned that Linux needed other devices, like enumerated and have it&rsquo;s resources allocated, so yet another stage, ramstage, was called into life, but that&rsquo;s another story.
+</p>
+</div>
+</div>
+<div id="outline-container-orgd6f9fc8" class="outline-3">
+<h3 id="orgd6f9fc8">coreboot v2: romcc</h3>
+<div class="outline-text-3" id="text-orgd6f9fc8">
+<p>
+In 2003 AMD&rsquo;s K8 CPU&rsquo;s came out. Those CPU&rsquo;s featured an on die memory controller and also a new point to point BUS for CPU &lt;-&gt; CPU and CPU &lt;-&gt; IO controller (northbridge) devices, called Hypertransport. Writing support for these in assembly became difficult and a better solution was needed. This is where ROMCC came to the rescue. ROMCC is a 25K lines of code C compiler, written by Eric Biederman, that does not use a stack but uses CPU registers instead. Besides the 8 general purpose registers on x86 the MMX and SSE registers, respectively %mm0-%mm7 and %xmm0-%xmm7, can be used to store data. ROMCC also converts all function calls to static inline functions. This has the disadvantage that a ROMCC compiled stage must be compiled in one go, linking is not possible. In practice you will see a lot of &rsquo;#include _somefile.c&rsquo; which is quite unusual in C, because it makes the order of inclusion of files fragile. Given that limited amount &rsquo;register-stack&rsquo;, it also imposes restrictions on how many levels of nested function can be achieved. One last issue with ROMCC is that no-one really dared touching that code, due to its size and complexity besides its original author.
+</p>
+
+<p>
+coreboot used ROMCC in the following way: a bootblock would use assembly to enter 32bit protected mode after which it would use ROMCC compiled code to either jump to &rsquo;normal/romstage&rsquo; or &rsquo;fallback/romstage&rsquo; which in turn was also compiled with ROMCC.
+</p>
+</div>
+</div>
+<div id="outline-container-orgbbb0268" class="outline-3">
+<h3 id="orgbbb0268">Cache-as-Ram</h3>
+<div class="outline-text-3" id="text-orgbbb0268">
+<p>
+While ROMCC was eventually used for early initialization, prior to that development attempts were made to use the CPU&rsquo;s cache as RAM. This would allow regular GCC compiled and linked code to be used. The idea is to set up the CPU&rsquo;s cache to Write Back to a fixed region, while disable cacheline filling or simply hope that no cache eviction or invalidation happens. Eric Biederman initially got CAR working, but with the advent of Intel Hyperthreading on the Pentium 4, on which CAR setup proved to be a little more difficult and he developed ROMCC instead.
+</p>
+
+<p>
+Around 2006 a lot was learned from coreboot v2 with its ROMCC usage and development on coreboot v3 was started. The decision was mode to not use ROMCC anymore and use Cache-as-Ram for early stages. The results were good as init object code size is reduced by factor of four. So the code was smaller and faster at the same time.
+</p>
+
+<p>
+coreboot v4 sort of merged v2 and v3, so it was a mix of ROMCC compiled romstage and romstage with CAR.
+</p>
+
+<p>
+In 2014 Support for ROMCC compiled romstage was dropped.
+</p>
+</div>
+</div>
+<div id="outline-container-orgf7ad92e" class="outline-3">
+<h3 id="orgf7ad92e">Intel Apollolake, a new era: POSTCAR<sub>STAGE</sub> and C<sub>ENVIRONMENT</sub><sub>BOOTBLOCK</sub></h3>
+<div class="outline-text-3" id="text-orgf7ad92e">
+<p>
+In 2016 Intel released the ApolloLake architecture. This architecture is a weird duck in the X86 pool. It is the first Intel CPU to feature MMC as a boot medium and it does not memory map it. It also features to the main CPU read only SRAM that is mapped right below 4G. Before the main CPU is released from reset the bootblock is copied to SRAM and executed. Given that the boot medium is not (always) memory mapped XIP is not an option. The solution is to set up CAR in the bootblock and copy the romstage in CAR. We call this C<sub>ENVIRONMENT</sub><sub>BOOTBLOCK</sub>, because it runs GCC compiled code. Granted XIP is still possible on ApolloLake when using SPI flash as bootmedium, but coreboot has to use Intel&rsquo;s blob, FSP-M, and it is linked to run in CAR, so a blob actually forced a nice feature in coreboot!
+</p>
+
+<p>
+Another issue arises with this setup. With romstage running from the read only boot medium, you can continue executing code (albeit without a stack) to tear down the CAR and start executing code from &rsquo;real&rsquo; RAM. On ApolloLake with romstage executing from CAR, tearing down CAR in there, would shooting in ones own foot as our code would be gone in doing so. The solution was to tear down CAR in a separate stage, named &rsquo;postcar&rsquo; stage. This provides a clean separation of programs and results in needing less linker scripts hacks in romstage. This solution was therefore adopted by many other platforms even though they did XIP.
+</p>
+</div>
+</div>
+<div id="outline-container-org1e3aba1" class="outline-3">
+<h3 id="org1e3aba1">AMD Zen, 2019</h3>
+<div class="outline-text-3" id="text-org1e3aba1">
+<p>
+On AMD Zen the first CPU to come out of reset is the PSP and it initializes the dram controller before pulling out the main CPU out of reset. CAR won&rsquo;t be needed nor used on this platform.
+</p>
+</div>
+</div>
+<div id="outline-container-org1405a40" class="outline-3">
+<h3 id="org1405a40">The future?</h3>
+<div class="outline-text-3" id="text-org1405a40">
+<p>
+For coreboot release 4.11, scheduled for october 2019, support for ROMCC in the bootblock will be dropped as will support for the messy tearing down of CAR in romstage as opposed to doing that in a separate stage.
+</p>
+</div>
+</div>
+</section>
+<section id="outline-container-org8481701" class="outline-2">
+<h2 id="org8481701">References</h2>
+<div class="outline-text-2" id="text-org8481701">
+<p>
+<a href="http://www.h-online.com/open/features/The-Open-Source-BIOS-is-Ten-An-interview-with-the-coreboot-developers-746525.html">2007, The Open Source BIOS is Ten An interview with the coreboot developers</a>
+<a href="https://www.coreboot.org/images/6/6c/LBCar.pdf">A Framework for Using Processor Cache-as-Ram (CAR)</a>
+<a href="https://www.coreboot.org/data/yhlu/cache_as_ram_lb_09142006.pdf">CAR: Using Cache-as-Ram in LinuxBIOS</a>
+</p>
+</div>
+</section>
+</main>
+<footer id="postamble" class="status">
+<div class='footer'>
+  Copyright © 2022 Arthur Heymans<br>
+  Last updated on Oct 11, 2022. Generated using <a href="https://www.gnu.org/software/emacs/">Emacs</a> 29.0.50 (<a href="https://orgmode.org">Org</a> mode 9.4.6).
+</div>
+</footer>
+</body>
+</html>

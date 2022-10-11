@@ -77,7 +77,7 @@
 This is a problem since the first code that runs on the CPU comes from there and if we ever want to run coreboot the cpu must start with coreboot code. This write protection is set in the PBR (protect bios range) registers on the southbridge, there is currently no known way to change them back once they are locked by setting the SPI Configuration Lock-Down bit.
 </p>
 
-<pre class="example" id="orgdfc8d1f">
+<pre class="example" id="orge82576b">
 FLASH (2M)
     +--------------------+ -&gt; 0x200000
     |                    |
@@ -117,7 +117,7 @@ Luckily the chipset provides a feature called BUC.TS (back up control top swap).
 This ascii art tries to explain it.
 </p>
 
-<pre class="example" id="orgf27f4f1">
+<pre class="example" id="org15f3cdb">
 +-------------+ -&gt; 0x200000         +-------------+ -&gt; 0xFFFFFFFF       +-------------+ -&gt; 0xFFFFFFFF
 |             |                     |             |                     |             |
 | bootblock_0 |                     | bootblock_0 |                     | bootblock_1 |
@@ -281,7 +281,7 @@ We need a second bootblock at a 64K offset of the bottom.
 In the menuconfig select:
 </p>
 
-<pre class="example" id="org715340e">
+<pre class="example" id="org0aababb">
 CONFIG_INTEL_ADD_TOP_SWAP_BOOTBLOCK=y
 </pre>
 
@@ -289,7 +289,7 @@ CONFIG_INTEL_ADD_TOP_SWAP_BOOTBLOCK=y
 and make sure the bootblock size remains to the default 0x10000:
 </p>
 
-<pre class="example" id="orgf4f5c25">
+<pre class="example" id="orgeaefee4">
 CONFIG_INTEL_TOP_SWAP_BOOTBLOCK_SIZE=0x10000
 </pre>
 
@@ -297,7 +297,7 @@ CONFIG_INTEL_TOP_SWAP_BOOTBLOCK_SIZE=0x10000
 Coreboot set BILD (BIOS Interface Lock-Down) register, which prevents changes to BUC.TS. Since we only set BUC.TS to flash coreboot once but want to unset it later on we want
 </p>
 
-<pre class="example" id="org3316bc7">
+<pre class="example" id="org7a05e35">
 # CONFIG_INTEL_CHIPSET_LOCKDOWN is not set
 </pre>
 
@@ -335,7 +335,7 @@ The defaults are ok (SeaBIOS with native graphic init) so the only thing we will
 make sure at the end of the build process you see the following line at the end:
 </p>
 
-<pre class="example" id="org4bc0a61">
+<pre class="example" id="orge0330f9">
 bootblock                      0x1dfdc0   bootblock      131072 none
 </pre>
 
@@ -390,7 +390,7 @@ Now we want to flip BUC.TS
 Now the scary/fun part: flashing the actual rom. Because the bottom part of the flash is write protected we want to skip writing to it because that will have flashrom print out some scary messages. To do this we will be using a layout. Create a file, x60<sub>layout</sub> with the following content:
 </p>
 
-<pre class="example" id="orga504eb5">
+<pre class="example" id="orgebf084b">
 0x00000000:0x001effff RW
 0x001f0000:0x001fffff RO
 </pre>
@@ -452,12 +452,9 @@ Note that you can use your distro’s flashrom now. When building a new coreboot
 <p>
 <b>NOTE: you might want to re-flash a new build with <code>CONFIG_INTEL_CHIPSET_LOCKDOWN=y</code> set since locking down the system is a desirable security feature.</b>
 </p>
-
-<p>
-Was originally published here.
-</p>
 </div>
 </section>
+
 <section id="outline-container-orga34c32c" class="outline-2">
 <h2 id="orga34c32c">TODO</h2>
 <div class="outline-text-2" id="text-orga34c32c">

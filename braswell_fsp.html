@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+<head>
+<!-- Oct 11, 2022 -->
+<meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>FSP1.1 Braswell TempRaminit problems</title>
+<meta name="author" content="Arthur Heymans" />
+<meta name="generator" content="Org Mode" />
+<link rel='icon' type='image/x-icon' href='/images/favicon.ico'/>
+<meta name='viewport' content='width=device-width, initial-scale=1'>
+<link rel='stylesheet' href='https://code.cdn.mozilla.net/fonts/fira.css'>
+<link rel='stylesheet' href='/css/site.css?v=2' type='text/css'/>
+<link rel='stylesheet' href='/css/custom.css' type='text/css'/>
+<link rel='stylesheet' href='/css/syntax-coloring.css' type='text/css'/>
+<script>
+// @license magnet:?xt=urn:btih:1f739d935676111cfff4b4693e3816e664797050&amp;dn=gpl-3.0.txt GPL-v3-or-Later
+     function CodeHighlightOn(elem, id)
+     {
+       var target = document.getElementById(id);
+       if(null != target) {
+         elem.classList.add("code-highlighted");
+         target.classList.add("code-highlighted");
+       }
+     }
+     function CodeHighlightOff(elem, id)
+     {
+       var target = document.getElementById(id);
+       if(null != target) {
+         elem.classList.remove("code-highlighted");
+         target.classList.remove("code-highlighted");
+       }
+     }
+// @license-end
+</script>
+</head>
+<body>
+<div id="org-div-home-and-up">
+ <a accesskey="h" href="/"> UP </a>
+ |
+ <a accesskey="H" href="/"> HOME </a>
+</div><header id="top" class="status">
+<div class='intro'>
+  <img src='/images/about/profile.png' alt='Arthur Heymans' class='no-border'/>
+  <h1>
+    <span class="gray">Arthur</span>
+    <span class="black">Heymans</span>
+  </h1>
+  <p>hacker</p>
+</div>
+
+<div class='nav'>
+<ul>
+<li><a href='/'>Blog</a>.</li>
+<li><a href='/index.xml'>RSS</a>.</li>
+<li><a href='/about/'>About</a></li>
+</ul>
+</div>
+</header>
+<main id="content" class="content">
+<h1 class="title">FSP1.1 Braswell TempRaminit problems
+<br />
+<span class="subtitle">Published on Nov 23, 2019 by Arthur Heymans.</span>
+</h1>
+<p>
+Coreboot is migrating platforms from a romcc bootblock to <code>C_ENVIRONMENT_BOOTBLOCK</code> in which Cache-as-Ram is set up in the bootblock.
+When migrating Braswell, chromebooks featuring this SOC did not boot anymore while other boards did. Google uses a different FSP binary than the one present in the Intel Github FSP repository.
+</p>
+
+<p>
+Previously the romcc bootblock set up caching of the ROM, located microcodes and performed the update before calling FSP TempRaminit.
+</p>
+
+<p>
+Given that you pass on a pointer and a size of the microcode updates to the FSP TempRaminit the assumption was made that loading microcode updates before loading FSP was not needed.
+This assumption was correct for the public FSP release.
+</p>
+
+<p>
+The google FSP contains a bug however. Let&rsquo;s see what is going on.
+</p>
+
+<p>
+Often your system can feature multiple CPU revisions and including different microcode for these revision is needed. Intel microcode updates have a simple format. They have a header specifying the CPU target + the size and a data section holding the actual update. What is done is to append microcode updates to each other in one file and loop through them until the correct one is found.
+</p>
+
+<p>
+The FSP does the following:
+</p>
+
+<ul class="org-ul">
+<li>Loop through microcode</li>
+<li>Check for revision, flags, &#x2026;</li>
+<li>If a match is found, check if it is not the same revision as currently installed (it should check for &gt; current revision!)</li>
+<li>go the the next one by parsing the header for the size</li>
+<li>When the end is reached, check for the current installed revision. If it&rsquo;s 0 bail out (and reboot!)</li>
+</ul>
+
+<p>
+The bug of the Google FSP release lies in incrementing the register holding the microcode address.
+At some point the intend is to increment it with 0x14 and compare the revision to the CPUID.
+Instead of incrementing it with <code>$0x14</code>, it increments it to <code>0x14</code>.
+This means that not 0x14 is additioned but whatever the content of address 0x14 holds, which is unkown since memory is not initialized at this point.
+</p>
+
+<p>
+So what happens is that the Google FSP binary cannot load the update microcode if the first microcode is not a match, which will have the FSP fail and reboot (loop).
+</p>
+
+<p>
+The Intel FSP release has this bug fixed.
+</p>
+
+
+<div id="org5c2d6b3" class="figure">
+<p><img src="../images/posts/brasswell_fsp_problem.png" alt="brasswell_fsp_problem.png" class="center no-border" />
+</p>
+<p><span class="figure-number">Figure 1: </span>The google FSP version for Braswell has a bug in the microcode updater</p>
+</div>
+
+<p>
+Given the nature of the microcode update mechanism of the FSP and the check it does at the end. The best solution seems to be to provide the FSP with a fake MCU and do the updating ourselves before FSP is called. This reduces dependency on FSP doing the right thing (which in this case it clearly doesn&rsquo;t) and also removes the need to specifiy the MCU location at build-time.
+</p>
+</main>
+<footer id="postamble" class="status">
+<div class='footer'>
+  Copyright © 2022 Arthur Heymans<br>
+  Last updated on Oct 11, 2022. Generated using <a href="https://www.gnu.org/software/emacs/">Emacs</a> 29.0.50 (<a href="https://orgmode.org">Org</a> mode 9.4.6).
+</div>
+</footer>
+</body>
+</html>
