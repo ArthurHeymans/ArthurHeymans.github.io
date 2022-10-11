@@ -65,10 +65,14 @@
 <span class="subtitle">Published on May 26, 2021 by Arthur Heymans.</span>
 </h1>
 
-<div id="org96ad0c5" class="figure">
-<p><img src="../images/posts/roots.jpg" alt="roots.jpg" class="center no-border" />
+<div id="org597c6dd" class="figure">
+<p><img src="../images/posts/roots.jpg" alt="roots.jpg" class="center no-border" width="70%" height="70%" />
 </p>
 </div>
+
+<p>
+This blog enty first appeared on the 9esec <a href="https://9esec.io/blog/hardware-assisted-root-of-trust-mechanism-and-coreboot-internals">blog</a>.
+</p>
 
 <p>
 I started working for 9elements in October 2020 and my first assignment was to get Intel CBnT working on the OCP Deltalake using coreboot firmware.
@@ -184,7 +188,7 @@ all those different SOCs Google uses a common flash based root of trust. The
 root of trust lies in a read only region of the flash which is a feature of some
 SPI flash which is kept in place by holding the /WP pin low. The verification
 mechanism resides in the read only region and verifies the firmware in
-FW<sub>MAIN</sub><sub>A</sub>/B FMAP partitions. The RO region of the flash does hold a full
+&rsquo;FW_MAIN_A/B&rsquo; FMAP partitions. The RO region of the flash does hold a full
 firmware for recovery. This copy of the firmware is also considered trusted.
 Such a VBOOT setup does not work that well with a root of trust method like
 CBnT/Bootguard. With Bootguard some initial parts of the firmware are marked as
@@ -196,7 +200,7 @@ big. Only code that is required to set up a chain of trust ought to be marked as
 IBB, not a full firmware in &rsquo;RO&rsquo; region. In more practical terms, if the
 bootblock is marked as IBB with Bootguard, the romstage that comes after it
 cannot be a romstage in the in &rsquo;RO&rsquo; FMAP region as there is no verification on
-it. VBOOT needs to be modified to only load things from FW<sub>MAIN</sub><sub>A</sub>/B. Just not
+it. VBOOT needs to be modified to only load things from FW_MAIN_A/B. Just not
 populating the RO FMAP with a romstage is not sufficient. An attacker could just
 take a working Bootguard image and manually add a romstage in the RO cbfs. The
 solution is to disable the option for a full recovery bootpath in VBOOT.

@@ -65,7 +65,8 @@
 <span class="subtitle">Published on Nov 23, 2019 by Arthur Heymans.</span>
 </h1>
 <p>
-Coreboot is migrating platforms from a romcc bootblock to C<sub>ENVIRONMENT</sub><sub>BOOTBLOCK</sub> in which Cache-as-Ram is set up in the bootblock. When migrating Braswell, chromebooks featuring this SOC did not boot anymore while other boards did. Google uses a different FSP binary than the one present in the Intel Github FSP repository.
+Coreboot is migrating platforms from a romcc bootblock to <code>C_ENVIRONMENT_BOOTBLOCK</code> in which Cache-as-Ram is set up in the bootblock.
+When migrating Braswell, chromebooks featuring this SOC did not boot anymore while other boards did. Google uses a different FSP binary than the one present in the Intel Github FSP repository.
 </p>
 
 <p>
@@ -73,7 +74,8 @@ Previously the romcc bootblock set up caching of the ROM, located microcodes and
 </p>
 
 <p>
-Given that you pass on a pointer and a size of the microcode updates to the FSP TempRaminit the assumption was made that loading microcode updates before loading FSP was not needed. This assumption was correct for the public FSP release.
+Given that you pass on a pointer and a size of the microcode updates to the FSP TempRaminit the assumption was made that loading microcode updates before loading FSP was not needed.
+This assumption was correct for the public FSP release.
 </p>
 
 <p>
@@ -112,8 +114,8 @@ The Intel FSP release has this bug fixed.
 </p>
 
 
-<div id="org0a1aefa" class="figure">
-<p><img src="../images/posts/brasswell_fsp_problem.png" alt="brasswell_fsp_problem.png" />
+<div id="org5c2d6b3" class="figure">
+<p><img src="../images/posts/brasswell_fsp_problem.png" alt="brasswell_fsp_problem.png" class="center no-border" />
 </p>
 <p><span class="figure-number">Figure 1: </span>The google FSP version for Braswell has a bug in the microcode updater</p>
 </div>
