@@ -1,0 +1,477 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+<head>
+<!-- Oct 11, 2022 -->
+<meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>How to flash coreboot to the thinkpad x60 the proper way</title>
+<meta name="author" content="Arthur Heymans" />
+<meta name="generator" content="Org Mode" />
+<link rel='icon' type='image/x-icon' href='/images/favicon.ico'/>
+<meta name='viewport' content='width=device-width, initial-scale=1'>
+<link rel='stylesheet' href='https://code.cdn.mozilla.net/fonts/fira.css'>
+<link rel='stylesheet' href='/css/site.css?v=2' type='text/css'/>
+<link rel='stylesheet' href='/css/custom.css' type='text/css'/>
+<link rel='stylesheet' href='/css/syntax-coloring.css' type='text/css'/>
+<script>
+// @license magnet:?xt=urn:btih:1f739d935676111cfff4b4693e3816e664797050&amp;dn=gpl-3.0.txt GPL-v3-or-Later
+     function CodeHighlightOn(elem, id)
+     {
+       var target = document.getElementById(id);
+       if(null != target) {
+         elem.classList.add("code-highlighted");
+         target.classList.add("code-highlighted");
+       }
+     }
+     function CodeHighlightOff(elem, id)
+     {
+       var target = document.getElementById(id);
+       if(null != target) {
+         elem.classList.remove("code-highlighted");
+         target.classList.remove("code-highlighted");
+       }
+     }
+// @license-end
+</script>
+</head>
+<body>
+<div id="org-div-home-and-up">
+ <a accesskey="h" href="/"> UP </a>
+ |
+ <a accesskey="H" href="/"> HOME </a>
+</div><header id="top" class="status">
+<div class='intro'>
+  <img src='/images/about/profile.png' alt='Arthur Heymans' class='no-border'/>
+  <h1>
+    <span class="gray">Arthur</span>
+    <span class="black">Heymans</span>
+  </h1>
+  <p>hacker</p>
+</div>
+
+<div class='nav'>
+<ul>
+<li><a href='/'>Blog</a>.</li>
+<li><a href='/index.xml'>RSS</a>.</li>
+<li><a href='/about/'>About</a></li>
+</ul>
+</div>
+</header>
+<main id="content" class="content">
+<h1 class="title">How to flash coreboot to the thinkpad x60 the proper way
+<br />
+<span class="subtitle">Published on Dec 01, 2018 by Arthur Heymans.</span>
+</h1>
+
+
+<section id="outline-container-orgc627baf" class="outline-2">
+<h2 id="orgc627baf">What is so special about the x60 when running vendor bios?</h2>
+<div class="outline-text-2" id="text-orgc627baf">
+</div>
+<div id="outline-container-orgb6a62be" class="outline-3">
+<h3 id="orgb6a62be">Vendor BIOS write protects its bootblock, which means the lowest 64K of the flash can’t be modified</h3>
+<div class="outline-text-3" id="text-orgb6a62be">
+<p>
+This is a problem since the first code that runs on the CPU comes from there and if we ever want to run coreboot the cpu must start with coreboot code. This write protection is set in the PBR (protect bios range) registers on the southbridge, there is currently no known way to change them back once they are locked by setting the SPI Configuration Lock-Down bit.
+</p>
+
+<pre class="example" id="orgdfc8d1f">
+FLASH (2M)
+    +--------------------+ -&gt; 0x200000
+    |                    |
+    |  bootblock_0       | ---&gt; Only read allowed
+    |                    |
+    +--------------------+ -&gt; 0x1F0000
+    |                    |  ---&gt; Read and write: ok
+    Z                    Z
+    Z                    Z
+    |                    |
+    +--------------------+ -&gt; 0x000000
+</pre>
+</div>
+</div>
+
+<div id="outline-container-orgf1400b5" class="outline-3">
+<h3 id="orgf1400b5">Vendor BIOS prohibits many flash operations</h3>
+<div class="outline-text-3" id="text-orgf1400b5">
+<p>
+Naturally flash chips have many different operation, for example multiple read, write, erase and ID probe operation. The vendor bios prohibits a lot of those, which is why stock flashrom will fail to work properly.
+</p>
+</div>
+</div>
+</section>
+<section id="outline-container-orga20fa42" class="outline-2">
+<h2 id="orga20fa42">How to solve these issue without needing external or hardware flashing</h2>
+<div class="outline-text-2" id="text-orga20fa42">
+</div>
+<div id="outline-container-org3c36c05" class="outline-3">
+<h3 id="org3c36c05">The write protection problem</h3>
+<div class="outline-text-3" id="text-org3c36c05">
+<p>
+Luckily the chipset provides a feature called BUC.TS (back up control top swap). In this mode the way the flash gets decoded (read by the cpu) changes. In this mode not the lowest 64K get read by the CPU first but the 64K above those. This is great since we can now put our coreboot bootblock in that 64K region above and that will execute first on the CPU instead of the vendor BIOS bootblock!
+</p>
+
+<p>
+This ascii art tries to explain it.
+</p>
+
+<pre class="example" id="orgf27f4f1">
++-------------+ -&gt; 0x200000         +-------------+ -&gt; 0xFFFFFFFF       +-------------+ -&gt; 0xFFFFFFFF
+|             |                     |             |                     |             |
+| bootblock_0 |                     | bootblock_0 |                     | bootblock_1 |
+|             |                     |             |                     |             |
++-------------+ -&gt; 0x1F0000         +-------------+ -&gt; 0xFFFF0000       +-------------+ -&gt; 0xFFFF0000
+|             |                     |             |                     |             |
+| bootblock_1 |                     | bootblock_1 |                     | bootblock_0 |
+|             |                     |             |                     |             |
++-------------+ -&gt; 0x1E0000         +-------------+ -&gt; 0xFFFE0000       +-------------+ -&gt; 0xFFFE0000
+|             |                     |             |                     |             |
+|             |                     |             |                     |             |
+Z             Z                     Z             Z                     Z             Z
+Z             Z                     Z             Z                     Z             Z
+|             |                     |             |                     |             |
+|             |                     |             |                     |             |
+FLASH (2M)                          Memory Map BUC.TS=0               Memory Map BUC.TS=1
+</pre>
+</div>
+</div>
+
+<div id="outline-container-orgf7ddaf9" class="outline-3">
+<h3 id="orgf7ddaf9">The flash operations restriction</h3>
+<div class="outline-text-3" id="text-orgf7ddaf9">
+<p>
+The only real issue will be that the flash cannot be detected with default flashrom ID operation. Luckily the flash has backup operation for probing the ID so we can patch flashrom to use those.
+</p>
+
+<p>
+There is some WIP to probe chips with multiple method which would obsolete the hack we need here.
+</p>
+</div>
+</div>
+</section>
+<section id="outline-container-org490cd90" class="outline-2">
+<h2 id="org490cd90">Some preparations</h2>
+<div class="outline-text-2" id="text-org490cd90">
+<p>
+Because of all of this some tools will be needed
+</p>
+</div>
+<div id="outline-container-orgb1be74d" class="outline-3">
+<h3 id="orgb1be74d">bucts</h3>
+<div class="outline-text-3" id="text-orgb1be74d">
+<p>
+To swap the BUC.TS bit we will need a tool called buc.ts. Go to the directory where the code is located and build it
+</p>
+
+<div class="org-src-container">
+<pre class="src src-bash"><span class="org-builtin">cd</span> util/bucts/
+make
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org8f17ae0" class="outline-3">
+<h3 id="org8f17ae0">flashrom</h3>
+<div class="outline-text-3" id="text-org8f17ae0">
+<p>
+Flashrom needs some patching to be able to probe the flashchips and write to them. On the X60 2 different flashchips can occur so we need to patch flashrom for two of these.
+</p>
+
+<p>
+First download flashrom (best outside the coreboot tree to keep everything tidy):
+</p>
+
+<div class="org-src-container">
+<pre class="src src-bash">wget https://download.flashrom.org/releases/flashrom-1.1.tar.bz2
+tar xvf flashrom-1.1.tar.bz2
+</pre>
+</div>
+
+<p>
+Go inside the flashrom dir, fetch the patches and apply them:
+</p>
+
+<div class="org-src-container">
+<pre class="src src-bash"><span class="org-builtin">cd</span> flashrom
+wget https://notabug.org/libreboot/libreboot/raw/master/resources/flashrom/patch/lenovobios_sst.diff
+wget https://notabug.org/libreboot/libreboot/raw/master/resources/flashrom/patch/lenovobios_macronix.diff
+patch -p0 &lt; lenovobios_sst.diff
+patch -p0 &lt; lenovobios_macronix.diff
+make
+</pre>
+</div>
+
+<p>
+For reference here are them:
+</p>
+
+<div class="org-src-container">
+<pre class="src src-diff"><span class="org-diff-header">--- </span><span class="org-diff-header"><span class="org-diff-file-header">flashchips.c    2014-12-30 01:59:49.846383043 +0000</span></span>
+<span class="org-diff-header">+++ </span><span class="org-diff-header"><span class="org-diff-file-header">flashchips.c.i945lenovobios_sst 2014-12-30 02:03:51.367580645 +0000</span></span>
+<span class="org-diff-hunk-header">@@ -10886,12 +10886,12 @@</span>
+<span class="org-diff-context">        .name       = "SST25VF016B",</span>
+<span class="org-diff-context">        .bustype    = BUS_SPI,</span>
+<span class="org-diff-context">        .manufacture_id = SST_ID,</span>
+<span class="org-diff-indicator-removed">-</span><span class="org-diff-removed">       .model_id   = SST_SST25VF016B,</span>
+<span class="org-diff-indicator-added">+</span><span class="org-diff-added">       .model_id   = 0x41,</span>
+<span class="org-diff-context">        .total_size = 2048,</span>
+<span class="org-diff-context">        .page_size  = 256,</span>
+<span class="org-diff-context">        .feature_bits   = FEATURE_WRSR_EITHER,</span>
+<span class="org-diff-context">        .tested     = TEST_OK_PREW,</span>
+<span class="org-diff-indicator-removed">-</span><span class="org-diff-removed">       .probe      = probe_spi_rdid,</span>
+<span class="org-diff-indicator-added">+</span><span class="org-diff-added">       .probe      = probe_spi_res2,</span>
+<span class="org-diff-context">        .probe_timing   = TIMING_ZERO,</span>
+<span class="org-diff-context">        .block_erasers  =</span>
+<span class="org-diff-context">        {</span>
+<span class="org-diff-hunk-header">@@ -10914,7 +10914,7 @@</span>
+<span class="org-diff-context">        },</span>
+<span class="org-diff-context">        .printlock  = spi_prettyprint_status_register_sst25vf016,</span>
+<span class="org-diff-context">        .unlock     = spi_disable_blockprotect,</span>
+<span class="org-diff-indicator-removed">-</span><span class="org-diff-removed">       .write      = spi_</span><span class="org-diff-removed"><span class="org-diff-refine-removed">aai</span></span><span class="org-diff-removed">_write,</span>
+<span class="org-diff-indicator-added">+</span><span class="org-diff-added">       .write      = spi_</span><span class="org-diff-added"><span class="org-diff-refine-added">chip</span></span><span class="org-diff-added">_write</span><span class="org-diff-added"><span class="org-diff-refine-added">_1</span></span><span class="org-diff-added">,</span>
+<span class="org-diff-context">        .read       = spi_chip_read,</span>
+<span class="org-diff-context">        .voltage    = {2700, 3600},</span>
+<span class="org-diff-context">    },</span>
+
+<span class="org-diff-header">-</span><span class="org-diff-header"><span class="org-diff-refine-removed">--</span></span><span class="org-diff-header"> </span><span class="org-diff-header"><span class="org-diff-file-header">flashchips.c    2014-12-30 </span></span><span class="org-diff-header"><span class="org-diff-file-header"><span class="org-diff-refine-removed">01</span></span></span><span class="org-diff-header"><span class="org-diff-file-header">:</span></span><span class="org-diff-header"><span class="org-diff-file-header"><span class="org-diff-refine-removed">59</span></span></span><span class="org-diff-header"><span class="org-diff-file-header">:</span></span><span class="org-diff-header"><span class="org-diff-file-header"><span class="org-diff-refine-removed">49</span></span></span><span class="org-diff-header"><span class="org-diff-file-header">.</span></span><span class="org-diff-header"><span class="org-diff-file-header"><span class="org-diff-refine-removed">846383043</span></span></span><span class="org-diff-header"><span class="org-diff-file-header"> +0000</span></span>
+<span class="org-diff-header">+</span><span class="org-diff-header"><span class="org-diff-refine-added">++</span></span><span class="org-diff-header"> </span><span class="org-diff-header"><span class="org-diff-file-header">flashchips.c</span></span><span class="org-diff-header"><span class="org-diff-file-header"><span class="org-diff-refine-added">.i945lenovobios_macronix</span></span></span><span class="org-diff-header"><span class="org-diff-file-header">    2014-12-30 </span></span><span class="org-diff-header"><span class="org-diff-file-header"><span class="org-diff-refine-added">02</span></span></span><span class="org-diff-header"><span class="org-diff-file-header">:</span></span><span class="org-diff-header"><span class="org-diff-file-header"><span class="org-diff-refine-added">05</span></span></span><span class="org-diff-header"><span class="org-diff-file-header">:</span></span><span class="org-diff-header"><span class="org-diff-file-header"><span class="org-diff-refine-added">16</span></span></span><span class="org-diff-header"><span class="org-diff-file-header">.</span></span><span class="org-diff-header"><span class="org-diff-file-header"><span class="org-diff-refine-added">060000647</span></span></span><span class="org-diff-header"><span class="org-diff-file-header"> +0000</span></span>
+<span class="org-diff-hunk-header">@@ -6605,12 +6605,12 @@</span>
+<span class="org-diff-context">        .name       = "MX25L1605D/MX25L1608D/MX25L1673E",</span>
+<span class="org-diff-context">        .bustype    = BUS_SPI,</span>
+<span class="org-diff-context">        .manufacture_id = MACRONIX_ID,</span>
+<span class="org-diff-indicator-removed">-</span><span class="org-diff-removed">       .model_id   = </span><span class="org-diff-removed"><span class="org-diff-refine-removed">MACRONIX_MX25L1605</span></span><span class="org-diff-removed">,</span>
+<span class="org-diff-indicator-added">+</span><span class="org-diff-added">       .model_id   = </span><span class="org-diff-added"><span class="org-diff-refine-added">0x14</span></span><span class="org-diff-added">,</span>
+<span class="org-diff-context">        .total_size = 2048,</span>
+<span class="org-diff-context">        .page_size  = 256,</span>
+<span class="org-diff-context">        .feature_bits   = FEATURE_WRSR_WREN,</span>
+<span class="org-diff-context">        .tested     = TEST_OK_PREW,</span>
+<span class="org-diff-indicator-removed">-</span><span class="org-diff-removed">       .probe      = probe_spi_</span><span class="org-diff-removed"><span class="org-diff-refine-removed">rdid</span></span><span class="org-diff-removed">,</span>
+<span class="org-diff-indicator-added">+</span><span class="org-diff-added">       .probe      = probe_spi_</span><span class="org-diff-added"><span class="org-diff-refine-added">res1</span></span><span class="org-diff-added">,</span>
+<span class="org-diff-context">        .probe_timing   = TIMING_ZERO,</span>
+<span class="org-diff-context">        .block_erasers  =</span>
+<span class="org-diff-context">        {</span>
+<span class="org-diff-hunk-header">@@ -6630,7 +6630,7 @@</span>
+<span class="org-diff-context">        },</span>
+<span class="org-diff-context">        .printlock  = spi_prettyprint_status_register_bp3_srwd, /* bit6: Continuously Program (CP) mode */</span>
+<span class="org-diff-context">        .unlock     = spi_disable_blockprotect,</span>
+<span class="org-diff-indicator-removed">-</span><span class="org-diff-removed">       .write      = spi_chip_write_</span><span class="org-diff-removed"><span class="org-diff-refine-removed">256</span></span><span class="org-diff-removed">,</span>
+<span class="org-diff-indicator-added">+</span><span class="org-diff-added">       .write      = spi_chip_write_</span><span class="org-diff-added"><span class="org-diff-refine-added">1</span></span><span class="org-diff-added">,</span>
+<span class="org-diff-context">        .read       = spi_chip_read, /* Fast read (0x0B), dual I/O supported */</span>
+<span class="org-diff-context">        .voltage    = {2700, 3600},</span>
+    },
+</pre>
+</div>
+
+<p>
+Now our flashrom is ready to use (remember to use this patched flashrom build and not the one from your distro).
+</p>
+</div>
+</div>
+<div id="outline-container-org11f8082" class="outline-3">
+<h3 id="org11f8082">Bootblock</h3>
+<div class="outline-text-3" id="text-org11f8082">
+<p>
+We need a second bootblock at a 64K offset of the bottom.
+</p>
+
+<p>
+In the menuconfig select:
+</p>
+
+<pre class="example" id="org715340e">
+CONFIG_INTEL_ADD_TOP_SWAP_BOOTBLOCK=y
+</pre>
+
+<p>
+and make sure the bootblock size remains to the default 0x10000:
+</p>
+
+<pre class="example" id="orgf4f5c25">
+CONFIG_INTEL_TOP_SWAP_BOOTBLOCK_SIZE=0x10000
+</pre>
+
+<p>
+Coreboot set BILD (BIOS Interface Lock-Down) register, which prevents changes to BUC.TS. Since we only set BUC.TS to flash coreboot once but want to unset it later on we want
+</p>
+
+<pre class="example" id="org3316bc7">
+# CONFIG_INTEL_CHIPSET_LOCKDOWN is not set
+</pre>
+
+<p>
+which prevents coreboot from locking down this register.
+</p>
+
+<p>
+Now we are ready to build the image which will be covered in the next section.
+</p>
+</div>
+</div>
+</section>
+<section id="outline-container-org9602a0d" class="outline-2">
+<h2 id="org9602a0d">Building the coreboot image</h2>
+<div class="outline-text-2" id="text-org9602a0d">
+<p>
+This section assumes you have got the coreboot toolchain built.
+</p>
+
+<p>
+Now it’s just a matter selecting some options and compiling the rom we will flash.
+</p>
+
+<p>
+The defaults are ok (SeaBIOS with native graphic init) so the only thing we will need to select are the binary repository for microcode select _Allow use of binary-only repository\/(CONFIG<sub>USEBLOBS</sub>) in make menuconfig under general the options from the previous section and build it:
+</p>
+
+<div class="org-src-container">
+<pre class="src src-bash">make
+</pre>
+</div>
+
+<p>
+make sure at the end of the build process you see the following line at the end:
+</p>
+
+<pre class="example" id="org4bc0a61">
+bootblock                      0x1dfdc0   bootblock      131072 none
+</pre>
+
+<p>
+The bootblock file must be exactly! 0x131072 (128K) large. It contains both the regular and the bucts bootblock.
+</p>
+</div>
+</section>
+<section id="outline-container-org70de467" class="outline-2">
+<h2 id="org70de467">Flashing the coreboot rom</h2>
+<div class="outline-text-2" id="text-org70de467">
+<p>
+This is the exciting part where we will actually flash coreboot to the motherboard.
+</p>
+
+<p>
+So our rom is now inside the coreboot tree sitting at build/coreboot.rom flashrom is in whichever place you downloaded, patched and build flashrom and bucts is under util/bucts/bucts
+</p>
+
+<p>
+Let’s get started. First backup the vendor bios in case something goes wrong. For this we need to use our special flashrom:
+</p>
+
+<div class="org-src-container">
+<pre class="src src-bash">./path/to/flashrom/flashrom --programmer internal -r backup.rom
+</pre>
+</div>
+
+<p>
+We want to be absolutely sure we got a proper backup so let’s verify it against the flash.
+</p>
+
+<div class="org-src-container">
+<pre class="src src-bash">./path/to/flashrom/flashrom --programmer internal --verify backup.rom
+</pre>
+</div>
+
+<p>
+Now put that backup.rom somewhere safe like on an USB drive.
+</p>
+
+<p>
+Now we want to flip BUC.TS
+</p>
+
+<div class="org-src-container">
+<pre class="src src-bash">util/bucts/bucts --set
+</pre>
+</div>
+
+<p>
+Now the scary/fun part: flashing the actual rom. Because the bottom part of the flash is write protected we want to skip writing to it because that will have flashrom print out some scary messages. To do this we will be using a layout. Create a file, x60<sub>layout</sub> with the following content:
+</p>
+
+<pre class="example" id="orga504eb5">
+0x00000000:0x001effff RW
+0x001f0000:0x001fffff RO
+</pre>
+
+<p>
+And let’s flash it using this layout
+</p>
+
+<div class="org-src-container">
+<pre class="src src-bash">./path/to/flashrom/flashrom --programmer internal --write build/coreboot.rm --layout x60_layout --image RW
+</pre>
+</div>
+
+<p>
+Flashrom will try some erase function (that the vendor BIOS prohibits using) but will succeed in the end. Note that it can take some time because slow write operations have have to be used.
+</p>
+
+<p>
+One thing you still want to do before rebooting is setting coreboot settings, located in the rtc nvram or cmos to their default values: start in the coreboot tree
+</p>
+
+<div class="org-src-container">
+<pre class="src src-bash"><span class="org-builtin">cd</span> util/nvramtool
+make
+./nvramtool -y ../../src/mainboard/lenovo/x60/cmos.layout -p ../../src/mainboard/lenovo/x60/cmos.default
+</pre>
+</div>
+
+<p>
+And done!
+</p>
+
+<p>
+<b>NOTE: If flashrom complains, then don’t reboot and report to #coreboot chat on freenode irc!</b>
+</p>
+
+<p>
+Well almost. If BUC.TS gets 0 again (which happens if you pull the RTC CMOS ‘yellow’ battery) it will start the vendor bootblock again and we have a brick. So we need to flash coreboot again which is now possible because coreboot does not write protect the flash/bootblock like vendor does it.
+</p>
+
+<p>
+So reboot from first flash, assuming flashrom did not complain previous. Simply flash the rom again and we are done (for real now) and set bucts to 0 again:
+</p>
+
+<div class="org-src-container">
+<pre class="src src-bash">flashrom -p internal -w build/coreboot.rom
+util/bucts/bucts --unset
+</pre>
+</div>
+
+<p>
+<b>It is really important to set BUC.TS to zero again.</b> When you build coreboot normally it won’t have a bucts bootblock and will therefore fail to boot (although pulling the cmos battery will do the trick too).
+</p>
+
+<p>
+Note that you can use your distro’s flashrom now. When building a new coreboot rom, you now don’t need to select <code>CONFIG_INTEL_ADD_TOP_SWAP_BOOTBLOCK=y</code> anymore.
+</p>
+
+<p>
+<b>NOTE: you might want to re-flash a new build with <code>CONFIG_INTEL_CHIPSET_LOCKDOWN=y</code> set since locking down the system is a desirable security feature.</b>
+</p>
+
+<p>
+Was originally published here.
+</p>
+</div>
+</section>
+<section id="outline-container-orga34c32c" class="outline-2">
+<h2 id="orga34c32c">TODO</h2>
+<div class="outline-text-2" id="text-orga34c32c">
+<p>
+Add this to the coreboot documentation
+</p>
+</div>
+</section>
+</main>
+<footer id="postamble" class="status">
+<div class='footer'>
+  Copyright © 2022 Arthur Heymans<br>
+  Last updated on Oct 11, 2022. Generated using <a href="https://www.gnu.org/software/emacs/">Emacs</a> 29.0.50 (<a href="https://orgmode.org">Org</a> mode 9.4.6).
+</div>
+</footer>
+</body>
+</html>
